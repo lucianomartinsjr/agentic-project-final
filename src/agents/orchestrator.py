@@ -34,6 +34,7 @@ class CreditSystemOrchestrator:
                     client_id=None,
                     amount=context.get("loan_amount"),
                     duration=context.get("duration"),
+                    purpose=context.get("purpose"),
                     status="DENIED",
                     reason=audit_res.get("message"),
                 )
@@ -48,24 +49,52 @@ class CreditSystemOrchestrator:
                     client_id=context.get("id"),
                     amount=context.get("loan_amount"),
                     duration=context.get("duration"),
+                    purpose=context.get("purpose"),
+                    sex=context.get("sex"),
+                    job=context.get("job"),
+                    housing=context.get("housing"),
+                    saving_accounts=context.get("saving_accounts"),
+                    checking_account=context.get("checking_account"),
                     status="DENIED",
                     reason=comp_res.get("message"),
                 )
-                return self._refuse(comp_res['message'])
+                return self._refuse(
+                    comp_res["message"],
+                    details=comp_res.get("details"),
+                )
 
             # 3. Risco (Remoto via MCP)
             # Como estamos dentro do 'async with', o self.mcp_client.session está ativo!
             risk_res = await self.risk_analyst.process(context)
             if not risk_res['success']:
+                risk_details = risk_res.get("details") or {}
+                ml_risk = {
+                    "risk_prediction": risk_details.get("risk_prediction"),
+                    "risk_probability": risk_details.get("risk_probability"),
+                    "status": risk_details.get("status"),
+                }
                 log_application_attempt(
                     cpf=context.get("cpf"),
                     client_id=context.get("id"),
                     amount=context.get("loan_amount"),
                     duration=context.get("duration"),
+                    purpose=context.get("purpose"),
+                    sex=context.get("sex"),
+                    job=context.get("job"),
+                    housing=context.get("housing"),
+                    saving_accounts=context.get("saving_accounts"),
+                    checking_account=context.get("checking_account"),
                     status="DENIED",
                     reason=f"Risco: {risk_res.get('reason')}",
                 )
-                return self._refuse(f"Risco: {risk_res.get('reason')}")
+                return self._refuse(
+                    f"Risco: {risk_res.get('reason')}",
+                    details={
+                        **risk_details,
+                        "purpose": context.get("purpose"),
+                    },
+                    ml_risk=ml_risk,
+                )
 
             # Propaga detalhes do ML para a emissão/log de aprovação
             context["ml_risk"] = {
@@ -78,6 +107,11 @@ class CreditSystemOrchestrator:
             issue_res = self.issuer.process(context)
             return issue_res['final_response']
 
-    def _refuse(self, reason):
+    def _refuse(self, reason, *, details=None, ml_risk=None):
         print(f"   ⛔ PEDIDO NEGADO: {reason}")
-        return {"status": "NEGADO", "motivo": reason}
+        payload = {"status": "NEGADO", "motivo": reason}
+        if details is not None:
+            payload["detalhes"] = details
+        if ml_risk is not None:
+            payload["ml_risk"] = ml_risk
+        return payload

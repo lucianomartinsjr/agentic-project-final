@@ -53,7 +53,19 @@ def calculate_debt_ratio(income: float, loan_amount: float) -> float:
         return -1.0
 
 @mcp.tool()
-def analyze_risk(age: int, income: float, loan_amount: float, duration: int, score: int) -> str:
+def analyze_risk(
+    age: int,
+    income: float,
+    loan_amount: float,
+    duration: int,
+    score: int,
+    purpose: str = "radio/TV",
+    sex: str = "male",
+    housing: str = "own",
+    saving_accounts: str = "no_inf",
+    checking_account: str = "no_inf",
+    job: int = 1,
+) -> str:
     """Executa o modelo de ML para prever risco."""
     try:
         future = _PREDICT_EXECUTOR.submit(
@@ -63,6 +75,12 @@ def analyze_risk(age: int, income: float, loan_amount: float, duration: int, sco
             float(loan_amount),
             int(duration),
             int(score),
+            purpose=purpose,
+            sex=sex,
+            housing=housing,
+            saving_accounts=saving_accounts,
+            checking_account=checking_account,
+            job=job,
         )
 
         # Timeout no lado do servidor para evitar travamento infinito

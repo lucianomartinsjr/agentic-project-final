@@ -45,6 +45,12 @@ class RiskAnalystAgent:
         loan_amount = request_context.get('loan_amount')
         duration = request_context.get('duration')
         score = request_context.get('score')
+        purpose = request_context.get('purpose')
+        sex = request_context.get('sex')
+        housing = request_context.get('housing')
+        saving_accounts = request_context.get('saving_accounts')
+        checking_account = request_context.get('checking_account')
+        job = request_context.get('job')
 
         try:
             ml_result_str = await self.mcp.call_tool(
@@ -55,14 +61,31 @@ class RiskAnalystAgent:
                     "loan_amount": loan_amount,
                     "duration": duration,
                     "score": score,
+                    "purpose": purpose,
+                    "sex": sex,
+                    "housing": housing,
+                    "saving_accounts": saving_accounts,
+                    "checking_account": checking_account,
+                    "job": job,
                 },
             )
             ml_result = _parse_mcp_payload(ml_result_str)
         except Exception as e:
-            # Fallback local: evita travar a UX quando MCP não responde
             print(f"   [{self.name}] MCP indisponível/timeout ({e}). Usando fallback local...")
             try:
-                ml_result = predict_credit_risk(int(age), float(income), float(loan_amount), int(duration), int(score))
+                ml_result = predict_credit_risk(
+                    int(age),
+                    float(income),
+                    float(loan_amount),
+                    int(duration),
+                    int(score),
+                    purpose=purpose,
+                    sex=sex,
+                    housing=housing,
+                    saving_accounts=saving_accounts,
+                    checking_account=checking_account,
+                    job=job,
+                )
             except Exception:
                 ml_result = {"status": "ERROR", "risk_probability": 0.0, "error_msg": str(e)}
 
@@ -81,26 +104,55 @@ class RiskAnalystAgent:
                 dti = 999.9
         
         # Lógica de Decisão
-        if ml_result.get('status') == 'HIGH_RISK' or dti > 20.0:
+        # Regra: negar se DTI muito alto OU se a probabilidade de risco ultrapassar um limiar.
+        # Isso evita negar automaticamente apenas porque o classificador retornou pred=1.
+        RISK_PROB_DENY_THRESHOLD = 0.75
+
+        ml_status = ml_result.get("status")
+        risk_prediction = ml_result.get("risk_prediction")
+        risk_probability = ml_result.get("risk_probability", 0.0)
+        try:
+            risk_probability = float(risk_probability)
+        except Exception:
+            risk_probability = 0.0
+
+        is_high_risk_prob = risk_probability >= RISK_PROB_DENY_THRESHOLD
+        is_high_dti = dti > 20.0
+
+        if is_high_risk_prob or is_high_dti:
+            triggers = []
+            if is_high_risk_prob:
+                triggers.append(
+                    f"ML={ml_status} (pred={risk_prediction}, prob={risk_probability:.4f} >= {RISK_PROB_DENY_THRESHOLD})"
+                )
+            if is_high_dti:
+                triggers.append(f"DTI={dti:.2f} (> 20.0)")
+
+            reason = "Risco Elevado"
+            if triggers:
+                reason = f"Risco Elevado ({'; '.join(triggers)})"
+
             return {
                 "success": False,
-                "reason": "Risco Elevado",
+                "reason": reason,
                 "details": {
-                    "ml_prob": ml_result.get('risk_probability', 0.0),
+                    "ml_prob": risk_probability,
                     "dti_ratio": dti,
-                    "risk_prediction": ml_result.get("risk_prediction"),
-                    "risk_probability": ml_result.get("risk_probability", 0.0),
-                    "status": ml_result.get("status"),
-                }
+                    "risk_prediction": risk_prediction,
+                    "risk_probability": risk_probability,
+                    "status": ml_status,
+                    "risk_prob_threshold": RISK_PROB_DENY_THRESHOLD,
+                },
             }
             
         return {
             "success": True, 
             "details": {
-                "ml_prob": ml_result.get('risk_probability', 0.0),
+                "ml_prob": risk_probability,
                 "dti_ratio": dti,
-                "risk_prediction": ml_result.get("risk_prediction"),
-                "risk_probability": ml_result.get("risk_probability", 0.0),
-                "status": ml_result.get("status"),
+                "risk_prediction": risk_prediction,
+                "risk_probability": risk_probability,
+                "status": ml_status,
+                "risk_prob_threshold": RISK_PROB_DENY_THRESHOLD,
             }
         }

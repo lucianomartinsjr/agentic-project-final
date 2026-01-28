@@ -3,7 +3,19 @@ from __future__ import annotations
 
 def clients_to_table(clients: list[dict]) -> list[list]:
     return [
-        [c.get("id"), c.get("name"), c.get("cpf"), c.get("income"), c.get("age"), c.get("score")]
+        [
+            c.get("id"),
+            c.get("name"),
+            c.get("cpf"),
+            c.get("income"),
+            c.get("age"),
+            c.get("score"),
+            c.get("sex"),
+            c.get("job"),
+            c.get("housing"),
+            c.get("saving_accounts"),
+            c.get("checking_account"),
+        ]
         for c in clients
     ]
 

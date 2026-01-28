@@ -26,13 +26,18 @@ def load_client_for_edit(client_choice: str):
     cpf = extract_cpf_from_choice(client_choice)
     data = get_client_data(cpf)
     if not data:
-        return "", "", 0.0, 0, 0
+        return "", "", 0.0, 0, 0, "male", 1, "own", "no_inf", "no_inf"
     return (
         data.get("name", ""),
         data.get("cpf", ""),
         data.get("income", 0.0),
         data.get("age", 0),
         data.get("score", 0),
+        data.get("sex") or "male",
+        data.get("job") if data.get("job") is not None else 1,
+        data.get("housing") or "own",
+        data.get("saving_accounts") or "no_inf",
+        data.get("checking_account") or "no_inf",
     )
 
 
@@ -42,6 +47,11 @@ def create_client_and_refresh(
     income,
     age,
     score,
+    sex,
+    job,
+    housing,
+    saving_accounts,
+    checking_account,
     current_selection,
     edit_selection,
 ):
@@ -70,6 +80,11 @@ def create_client_and_refresh(
         income=float(income),
         age=int(age),
         score=int(score),
+        sex=str(sex) if sex is not None else None,
+        job=int(job) if job is not None else None,
+        housing=str(housing) if housing is not None else None,
+        saving_accounts=str(saving_accounts) if saving_accounts is not None else None,
+        checking_account=str(checking_account) if checking_account is not None else None,
     )
 
     emoji = "✅" if res.get("success") else "⛔"
@@ -114,6 +129,11 @@ def update_client_and_refresh(
     income,
     age,
     score,
+    sex,
+    job,
+    housing,
+    saving_accounts,
+    checking_account,
     main_selection,
     edit_selection,
 ):
@@ -144,6 +164,11 @@ def update_client_and_refresh(
         income=float(income),
         age=int(age),
         score=int(score),
+        sex=str(sex) if sex is not None else None,
+        job=int(job) if job is not None else None,
+        housing=str(housing) if housing is not None else None,
+        saving_accounts=str(saving_accounts) if saving_accounts is not None else None,
+        checking_account=str(checking_account) if checking_account is not None else None,
     )
 
     emoji = "✅" if res.get("success") else "⛔"

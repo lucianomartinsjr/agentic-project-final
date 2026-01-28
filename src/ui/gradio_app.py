@@ -37,6 +37,22 @@ MODAL_CSS = """
 def create_demo() -> gr.Blocks:
     setup_database()
 
+    purpose_choices = [
+        "radio/TV",
+        "education",
+        "furniture/equipment",
+        "car",
+        "business",
+        "domestic appliances",
+        "repairs",
+        "vacation/others",
+    ]
+    sex_choices = ["male", "female"]
+    housing_choices = ["own", "free", "rent"]
+    saving_choices = ["no_inf", "little", "moderate", "quite rich", "rich"]
+    checking_choices = ["no_inf", "little", "moderate", "rich"]
+    job_choices = [0, 1, 2, 3]
+
     with gr.Blocks() as demo:
         gr.Markdown("# 🏦 Sistema Agêntico de Crédito")
 
@@ -53,6 +69,12 @@ def create_demo() -> gr.Blocks:
                         )
                         inp_amount = gr.Number(label="Valor", value=10000)
                         inp_duration = gr.Slider(6, 72, step=6, label="Meses", value=24)
+                        inp_purpose = gr.Dropdown(
+                            label="Purpose (finalidade)",
+                            choices=purpose_choices,
+                            value="radio/TV",
+                            interactive=True,
+                        )
                         btn_submit = gr.Button("🚀 Analisar", variant="primary")
 
                     with gr.Column():
@@ -61,10 +83,10 @@ def create_demo() -> gr.Blocks:
 
                 gr.Examples(
                     examples=[
-                        ["Alice Silva | 111.222.333-44", 10000, 24],
-                        ["Bob Santos | 555.666.777-88", 50000, 12],
+                        ["Alice Silva | 111.222.333-44", 10000, 24, "radio/TV"],
+                        ["Bob Santos | 555.666.777-88", 5000, 12, "car"],
                     ],
-                    inputs=[client_dropdown, inp_amount, inp_duration],
+                    inputs=[client_dropdown, inp_amount, inp_duration, inp_purpose],
                     label="🧪 Cenários de Teste (Clique para preencher)",
                 )
 
@@ -78,8 +100,32 @@ def create_demo() -> gr.Blocks:
                 with gr.Group(visible=True) as clients_list_group:
                     btn_refresh_clients = gr.Button("🔄 Atualizar lista")
                     clients_table = gr.Dataframe(
-                        headers=["id", "name", "cpf", "income", "age", "score"],
-                        datatype=["number", "str", "str", "number", "number", "number"],
+                        headers=[
+                            "id",
+                            "name",
+                            "cpf",
+                            "income",
+                            "age",
+                            "score",
+                            "sex",
+                            "job",
+                            "housing",
+                            "saving_accounts",
+                            "checking_account",
+                        ],
+                        datatype=[
+                            "number",
+                            "str",
+                            "str",
+                            "number",
+                            "number",
+                            "number",
+                            "str",
+                            "number",
+                            "str",
+                            "str",
+                            "str",
+                        ],
                         interactive=False,
                         wrap=True,
                     )
@@ -101,6 +147,21 @@ def create_demo() -> gr.Blocks:
                     new_income = gr.Number(label="Renda", value=5000)
                     new_age = gr.Number(label="Idade", value=30, precision=0)
                     new_score = gr.Number(label="Score", value=750, precision=0)
+                    new_sex = gr.Dropdown(label="Sexo", choices=sex_choices, value="male", interactive=True)
+                    new_job = gr.Dropdown(label="Job (0-3)", choices=job_choices, value=1, interactive=True)
+                    new_housing = gr.Dropdown(label="Housing", choices=housing_choices, value="own", interactive=True)
+                    new_saving = gr.Dropdown(
+                        label="Saving accounts",
+                        choices=saving_choices,
+                        value="no_inf",
+                        interactive=True,
+                    )
+                    new_checking = gr.Dropdown(
+                        label="Checking account",
+                        choices=checking_choices,
+                        value="no_inf",
+                        interactive=True,
+                    )
                     out_create = gr.Markdown()
                     with gr.Row():
                         btn_create = gr.Button("💾 Cadastrar", variant="primary")
@@ -121,6 +182,21 @@ def create_demo() -> gr.Blocks:
                     edit_income = gr.Number(label="Renda", value=0)
                     edit_age = gr.Number(label="Idade", value=0, precision=0)
                     edit_score = gr.Number(label="Score", value=0, precision=0)
+                    edit_sex = gr.Dropdown(label="Sexo", choices=sex_choices, value="male", interactive=True)
+                    edit_job = gr.Dropdown(label="Job (0-3)", choices=job_choices, value=1, interactive=True)
+                    edit_housing = gr.Dropdown(label="Housing", choices=housing_choices, value="own", interactive=True)
+                    edit_saving = gr.Dropdown(
+                        label="Saving accounts",
+                        choices=saving_choices,
+                        value="no_inf",
+                        interactive=True,
+                    )
+                    edit_checking = gr.Dropdown(
+                        label="Checking account",
+                        choices=checking_choices,
+                        value="no_inf",
+                        interactive=True,
+                    )
                     out_edit = gr.Markdown()
                     with gr.Row():
                         btn_update = gr.Button("💾 Salvar alterações", variant="primary")
@@ -134,13 +210,35 @@ def create_demo() -> gr.Blocks:
                 edit_dropdown.change(
                     fn=load_client_for_edit,
                     inputs=[edit_dropdown],
-                    outputs=[edit_name, edit_cpf, edit_income, edit_age, edit_score],
+                    outputs=[
+                        edit_name,
+                        edit_cpf,
+                        edit_income,
+                        edit_age,
+                        edit_score,
+                        edit_sex,
+                        edit_job,
+                        edit_housing,
+                        edit_saving,
+                        edit_checking,
+                    ],
                 )
 
                 demo.load(
                     fn=load_client_for_edit,
                     inputs=[edit_dropdown],
-                    outputs=[edit_name, edit_cpf, edit_income, edit_age, edit_score],
+                    outputs=[
+                        edit_name,
+                        edit_cpf,
+                        edit_income,
+                        edit_age,
+                        edit_score,
+                        edit_sex,
+                        edit_job,
+                        edit_housing,
+                        edit_saving,
+                        edit_checking,
+                    ],
                 )
 
                 # Botões abrir/fechar modais
@@ -152,13 +250,40 @@ def create_demo() -> gr.Blocks:
                 # Ações de salvar
                 btn_create.click(
                     fn=create_client_and_refresh,
-                    inputs=[new_name, new_cpf, new_income, new_age, new_score, client_dropdown, edit_dropdown],
+                    inputs=[
+                        new_name,
+                        new_cpf,
+                        new_income,
+                        new_age,
+                        new_score,
+                        new_sex,
+                        new_job,
+                        new_housing,
+                        new_saving,
+                        new_checking,
+                        client_dropdown,
+                        edit_dropdown,
+                    ],
                     outputs=[out_create, client_dropdown, edit_dropdown, clients_table, modal_create, modal_edit, clients_list_group],
                 )
 
                 btn_update.click(
                     fn=update_client_and_refresh,
-                    inputs=[edit_dropdown, edit_name, edit_cpf, edit_income, edit_age, edit_score, client_dropdown, edit_dropdown],
+                    inputs=[
+                        edit_dropdown,
+                        edit_name,
+                        edit_cpf,
+                        edit_income,
+                        edit_age,
+                        edit_score,
+                        edit_sex,
+                        edit_job,
+                        edit_housing,
+                        edit_saving,
+                        edit_checking,
+                        client_dropdown,
+                        edit_dropdown,
+                    ],
                     outputs=[out_edit, client_dropdown, edit_dropdown, clients_table, modal_create, modal_edit, clients_list_group],
                 )
 
@@ -180,7 +305,7 @@ def create_demo() -> gr.Blocks:
         # Bindings que dependem de componentes criados em outras abas
         btn_submit.click(
             fn=process_credit_analysis,
-            inputs=[client_dropdown, inp_amount, inp_duration],
+            inputs=[client_dropdown, inp_amount, inp_duration, inp_purpose],
             outputs=[out_message, out_json, apps_table],
         )
 

@@ -25,6 +25,12 @@ class IssuerAgent:
             client_id=request_context.get("id"),
             amount=request_context.get("loan_amount"),
             duration=request_context.get("duration"),
+            purpose=request_context.get("purpose"),
+            sex=request_context.get("sex"),
+            job=request_context.get("job"),
+            housing=request_context.get("housing"),
+            saving_accounts=request_context.get("saving_accounts"),
+            checking_account=request_context.get("checking_account"),
             status="APPROVED",
             reason=json.dumps(ml_risk_log, ensure_ascii=False),
         )
