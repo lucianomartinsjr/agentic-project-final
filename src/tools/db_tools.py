@@ -164,7 +164,10 @@ def log_application_attempt(*args, **kwargs):
         conn.close()
 
     # Mantém o comportamento de log no terminal
-    print(f"📝 LOG DB: CPF {cpf or '-'} (Cliente {client_id or '-'}) tentou {amount}. Status final: {status}")
+    extra = f" | reason={reason}" if reason else ""
+    print(
+        f"📝 LOG DB: CPF {cpf or '-'} (Cliente {client_id or '-'}) tentou {amount}. Status final: {status}{extra}"
+    )
     return True
 
 

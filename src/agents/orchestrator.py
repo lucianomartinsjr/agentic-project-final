@@ -67,6 +67,13 @@ class CreditSystemOrchestrator:
                 )
                 return self._refuse(f"Risco: {risk_res.get('reason')}")
 
+            # Propaga detalhes do ML para a emissão/log de aprovação
+            context["ml_risk"] = {
+                "risk_prediction": (risk_res.get("details") or {}).get("risk_prediction"),
+                "risk_probability": (risk_res.get("details") or {}).get("risk_probability"),
+                "status": (risk_res.get("details") or {}).get("status"),
+            }
+
             # 4. Emissão (Local)
             issue_res = self.issuer.process(context)
             return issue_res['final_response']

@@ -85,10 +85,22 @@ class RiskAnalystAgent:
             return {
                 "success": False,
                 "reason": "Risco Elevado",
-                "details": {"ml_prob": ml_result.get('risk_probability', 0.0), "dti_ratio": dti}
+                "details": {
+                    "ml_prob": ml_result.get('risk_probability', 0.0),
+                    "dti_ratio": dti,
+                    "risk_prediction": ml_result.get("risk_prediction"),
+                    "risk_probability": ml_result.get("risk_probability", 0.0),
+                    "status": ml_result.get("status"),
+                }
             }
             
         return {
             "success": True, 
-            "details": {"ml_prob": ml_result.get('risk_probability', 0.0), "dti_ratio": dti}
+            "details": {
+                "ml_prob": ml_result.get('risk_probability', 0.0),
+                "dti_ratio": dti,
+                "risk_prediction": ml_result.get("risk_prediction"),
+                "risk_probability": ml_result.get("risk_probability", 0.0),
+                "status": ml_result.get("status"),
+            }
         }
