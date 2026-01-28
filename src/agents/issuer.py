@@ -14,9 +14,12 @@ class IssuerAgent:
         
         # Loga no banco (Tool)
         log_application_attempt(
-            request_context.get('id', 0), 
-            request_context['loan_amount'], 
-            "APPROVED"
+            cpf=request_context.get("cpf"),
+            client_id=request_context.get("id"),
+            amount=request_context.get("loan_amount"),
+            duration=request_context.get("duration"),
+            status="APPROVED",
+            reason=None,
         )
         
         return {

@@ -2,3 +2,4 @@
 .env
 /src/agents/__pycache__
 /src/infrastructure/__pycache__
+/src/__pycache__
