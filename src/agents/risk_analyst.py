@@ -19,8 +19,7 @@ def _parse_mcp_payload(payload: str) -> dict:
             return obj
     except Exception:
         pass
-
-    # Compatibilidade com retorno antigo: str(dict) com aspas simples
+    
     try:
         obj = ast.literal_eval(payload)
         if isinstance(obj, dict):
@@ -33,34 +32,56 @@ def _parse_mcp_payload(payload: str) -> dict:
 class RiskAnalystAgent:
     def __init__(self, mcp_client):
         self.name = "Analista de Risco (IA)"
-        self.mcp = mcp_client # Instância do RealMCPClient
+        self.mcp = mcp_client 
 
     async def process(self, request_context):
         print(f"   [{self.name}] Solicitando análise via Protocolo MCP Real...")
         
-        # 1. Chamada Real via Protocolo
-        # O servidor retorna uma string (JSON), precisamos fazer parse
-        age = request_context.get('age')
-        income = request_context.get('income')
-        loan_amount = request_context.get('loan_amount')
-        duration = request_context.get('duration')
-        score = request_context.get('score')
-        purpose = request_context.get('purpose')
-        sex = request_context.get('sex')
-        housing = request_context.get('housing')
-        saving_accounts = request_context.get('saving_accounts')
-        checking_account = request_context.get('checking_account')
-        job = request_context.get('job')
+        age = request_context.get("age")
+        income = request_context.get("income")
+        loan_amount = request_context.get("loan_amount")
+        duration = request_context.get("duration")
+        score = request_context.get("score")
+        purpose = request_context.get("purpose")
+        sex = request_context.get("sex")
+        housing = request_context.get("housing")
+        saving_accounts = request_context.get("saving_accounts")
+        checking_account = request_context.get("checking_account")
+        job = request_context.get("job")
 
+        # Normalização mínima (best practice): garante tipos para tools/ML.
         try:
-            ml_result_str = await self.mcp.call_tool(
-                "analyze_risk",
-                arguments={
+            age_i = int(age)
+            income_f = float(income)
+            loan_amount_f = float(loan_amount)
+            duration_i = int(duration)
+            score_i = int(score)
+        except Exception as e:
+            return {
+                "success": False,
+                "reason": "Dados insuficientes/invalidos para análise de risco.",
+                "details": {
+                    "status": "ERROR",
+                    "error_msg": str(e),
                     "age": age,
                     "income": income,
                     "loan_amount": loan_amount,
                     "duration": duration,
                     "score": score,
+                },
+            }
+
+        ml_result = None
+        mcp_error = None
+        try:
+            ml_result_str = await self.mcp.call_tool(
+                "analyze_risk",
+                arguments={
+                    "age": age_i,
+                    "income": income_f,
+                    "loan_amount": loan_amount_f,
+                    "duration": duration_i,
+                    "score": score_i,
                     "purpose": purpose,
                     "sex": sex,
                     "housing": housing,
@@ -71,14 +92,26 @@ class RiskAnalystAgent:
             )
             ml_result = _parse_mcp_payload(ml_result_str)
         except Exception as e:
-            print(f"   [{self.name}] MCP indisponível/timeout ({e}). Usando fallback local...")
+            mcp_error = e
+
+        # Fail-safe: se MCP falhar ou retornar payload inválido, usar fallback local.
+        needs_local_fallback = (
+            ml_result is None
+            or ml_result.get("status") == "ERROR"
+            or ml_result.get("risk_prediction") is None
+            or ml_result.get("risk_probability") is None
+        )
+
+        if needs_local_fallback:
+            if mcp_error is not None:
+                print(f"   [{self.name}] MCP indisponível/timeout ({mcp_error}). Usando fallback local...")
             try:
                 ml_result = predict_credit_risk(
-                    int(age),
-                    float(income),
-                    float(loan_amount),
-                    int(duration),
-                    int(score),
+                    age_i,
+                    income_f,
+                    loan_amount_f,
+                    duration_i,
+                    score_i,
                     purpose=purpose,
                     sex=sex,
                     housing=housing,
@@ -86,44 +119,43 @@ class RiskAnalystAgent:
                     checking_account=checking_account,
                     job=job,
                 )
-            except Exception:
-                ml_result = {"status": "ERROR", "risk_probability": 0.0, "error_msg": str(e)}
+            except Exception as inner:
+                # Best practice: não aprovar com análise quebrada.
+                return {
+                    "success": False,
+                    "reason": "Falha na análise de risco (MCP e fallback local).",
+                    "details": {
+                        "status": "ERROR",
+                        "error_msg": str(inner),
+                        "risk_prediction": None,
+                        "risk_probability": 0.0,
+                    },
+                }
 
         # 2. Chamada para DTI
         try:
             dti_str = await self.mcp.call_tool(
                 "calculate_debt_ratio",
-                arguments={"income": income, "loan_amount": loan_amount},
+                arguments={"income": income_f, "loan_amount": loan_amount_f},
             )
             dti = float(dti_str)
         except Exception:
             print(f"   [{self.name}] Falha/timeout no cálculo DTI via MCP. Usando cálculo local...")
             try:
-                dti = float(calculate_dti(float(income), float(loan_amount)))
+                dti = float(calculate_dti(income_f, loan_amount_f))
             except Exception:
                 dti = 999.9
         
         # Lógica de Decisão
-        # Regra: negar se DTI muito alto OU se a probabilidade de risco ultrapassar um limiar.
-        # Isso evita negar automaticamente apenas porque o classificador retornou pred=1.
-        RISK_PROB_DENY_THRESHOLD = 0.75
-
-        ml_status = ml_result.get("status")
-        risk_prediction = ml_result.get("risk_prediction")
-        risk_probability = ml_result.get("risk_probability", 0.0)
-        try:
-            risk_probability = float(risk_probability)
-        except Exception:
-            risk_probability = 0.0
-
-        is_high_risk_prob = risk_probability >= RISK_PROB_DENY_THRESHOLD
+        ml_status = (ml_result or {}).get("status")
+        is_high_risk = ml_status == "HIGH_RISK"
         is_high_dti = dti > 20.0
 
-        if is_high_risk_prob or is_high_dti:
+        if is_high_risk or is_high_dti:
             triggers = []
-            if is_high_risk_prob:
+            if is_high_risk:
                 triggers.append(
-                    f"ML={ml_status} (pred={risk_prediction}, prob={risk_probability:.4f} >= {RISK_PROB_DENY_THRESHOLD})"
+                    f"ML={ml_status} (pred={ml_result.get('risk_prediction')}, prob={ml_result.get('risk_probability', 0.0)})"
                 )
             if is_high_dti:
                 triggers.append(f"DTI={dti:.2f} (> 20.0)")
@@ -136,23 +168,21 @@ class RiskAnalystAgent:
                 "success": False,
                 "reason": reason,
                 "details": {
-                    "ml_prob": risk_probability,
+                    "ml_prob": (ml_result or {}).get("risk_probability", 0.0),
                     "dti_ratio": dti,
-                    "risk_prediction": risk_prediction,
-                    "risk_probability": risk_probability,
+                    "risk_prediction": (ml_result or {}).get("risk_prediction"),
+                    "risk_probability": (ml_result or {}).get("risk_probability", 0.0),
                     "status": ml_status,
-                    "risk_prob_threshold": RISK_PROB_DENY_THRESHOLD,
                 },
             }
             
         return {
             "success": True, 
             "details": {
-                "ml_prob": risk_probability,
+                "ml_prob": (ml_result or {}).get("risk_probability", 0.0),
                 "dti_ratio": dti,
-                "risk_prediction": risk_prediction,
-                "risk_probability": risk_probability,
-                "status": ml_status,
-                "risk_prob_threshold": RISK_PROB_DENY_THRESHOLD,
+                "risk_prediction": (ml_result or {}).get("risk_prediction"),
+                "risk_probability": (ml_result or {}).get("risk_probability", 0.0),
+                "status": (ml_result or {}).get("status"),
             }
         }

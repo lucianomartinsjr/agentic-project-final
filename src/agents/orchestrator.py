@@ -38,7 +38,10 @@ class CreditSystemOrchestrator:
                     status="DENIED",
                     reason=audit_res.get("message"),
                 )
-                return self._refuse(audit_res['message'])
+                return self._refuse(
+                    audit_res.get("message"),
+                    details=audit_res.get("details"),
+                )
             context = audit_res['data']
 
             # 2. Compliance (Local)
@@ -63,8 +66,7 @@ class CreditSystemOrchestrator:
                     details=comp_res.get("details"),
                 )
 
-            # 3. Risco (Remoto via MCP)
-            # Como estamos dentro do 'async with', o self.mcp_client.session está ativo!
+            # 3. Risco 
             risk_res = await self.risk_analyst.process(context)
             if not risk_res['success']:
                 risk_details = risk_res.get("details") or {}

@@ -8,10 +8,72 @@ class IssuerAgent:
 
     def process(self, request_context):
         print(f"   [{self.name}] Finalizando proposta...")
+
+        loan_amount = request_context.get("loan_amount")
+        duration = request_context.get("duration")
+        cpf = request_context.get("cpf")
+        client_id = request_context.get("id")
+
+        try:
+            loan_amount_f = float(loan_amount)
+            duration_i = int(duration) if duration is not None else None
+        except Exception as e:
+            try:
+                log_application_attempt(
+                    cpf=cpf,
+                    client_id=client_id,
+                    amount=loan_amount,
+                    duration=duration,
+                    purpose=request_context.get("purpose"),
+                    sex=request_context.get("sex"),
+                    job=request_context.get("job"),
+                    housing=request_context.get("housing"),
+                    saving_accounts=request_context.get("saving_accounts"),
+                    checking_account=request_context.get("checking_account"),
+                    status="ERROR",
+                    reason=f"Issuer: dados inválidos ({str(e)})",
+                )
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "final_response": {
+                    "status": "ERRO",
+                    "mensagem": "Não foi possível emitir o contrato por dados inválidos.",
+                    "detalhes": {"error": str(e), "loan_amount": loan_amount, "duration": duration},
+                },
+            }
+
+        if loan_amount_f <= 0:
+            try:
+                log_application_attempt(
+                    cpf=cpf,
+                    client_id=client_id,
+                    amount=loan_amount_f,
+                    duration=duration_i,
+                    purpose=request_context.get("purpose"),
+                    sex=request_context.get("sex"),
+                    job=request_context.get("job"),
+                    housing=request_context.get("housing"),
+                    saving_accounts=request_context.get("saving_accounts"),
+                    checking_account=request_context.get("checking_account"),
+                    status="ERROR",
+                    reason="Issuer: loan_amount <= 0",
+                )
+            except Exception:
+                pass
+            return {
+                "success": False,
+                "final_response": {
+                    "status": "ERRO",
+                    "mensagem": "Valor do empréstimo inválido.",
+                    "detalhes": {"loan_amount": loan_amount_f},
+                },
+            }
         
         # Gera protocolo (Tool)
         protocol = generate_protocol_id()
-        amount_fmt = format_currency(request_context['loan_amount'])
+        amount_fmt = format_currency(loan_amount_f)
         
         # Loga no banco (Tool)
         ml_risk = request_context.get("ml_risk") or {}
@@ -21,10 +83,10 @@ class IssuerAgent:
             "status": ml_risk.get("status"),
         }
         log_application_attempt(
-            cpf=request_context.get("cpf"),
-            client_id=request_context.get("id"),
-            amount=request_context.get("loan_amount"),
-            duration=request_context.get("duration"),
+            cpf=cpf,
+            client_id=client_id,
+            amount=loan_amount_f,
+            duration=duration_i,
             purpose=request_context.get("purpose"),
             sex=request_context.get("sex"),
             job=request_context.get("job"),
