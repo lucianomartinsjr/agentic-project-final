@@ -1,6 +1,12 @@
 import asyncio
 from src.agents.orchestrator import CreditSystemOrchestrator
 
+# --- FIX PARA WINDOWS ---
+# Necessário para que subprocessos (MCP) funcionem corretamente no Windows
+import sys
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 async def main():
     system = CreditSystemOrchestrator()
     

@@ -3,4 +3,5 @@ numpy
 scikit-learn
 joblib
 mcp[cli] 
-uvicorn  
+uvicorn
+gradio

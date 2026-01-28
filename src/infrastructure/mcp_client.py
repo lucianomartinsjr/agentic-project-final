@@ -1,44 +1,74 @@
-import asyncio
 import sys
 import os
-from contextlib import AsyncExitStack
-
+import contextlib
+import asyncio
+import datetime
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-class RealMCPClient:
-    def __init__(self):
-        self.session = None
-        self.exit_stack = AsyncExitStack()
 
-    async def connect(self):
-        """Inicia o subprocesso do servidor e estabelece conexão MCP."""
-        # Define como rodar o servidor (o arquivo que criamos acima)
+class MCPToolTimeoutError(TimeoutError):
+    pass
+
+class RealMCPClient:
+    def __init__(self, *, init_timeout_s: float = 10.0, tool_timeout_s: float = 10.0):
+        self.session = None
+        # Permite override via env vars sem mexer no código
+        self.init_timeout_s = float(os.environ.get("MCP_INIT_TIMEOUT_S", init_timeout_s))
+        self.tool_timeout_s = float(os.environ.get("MCP_TOOL_TIMEOUT_S", tool_timeout_s))
+
+    @contextlib.asynccontextmanager
+    async def run_session(self):
+        # Caminho absoluto para o script do servidor
         server_script = os.path.join(os.path.dirname(__file__), "mcp_server.py")
         
+        env = os.environ.copy()
+        current_dir = os.getcwd()
+        env["PYTHONPATH"] = current_dir + os.pathsep + env.get("PYTHONPATH", "")
+        
         server_params = StdioServerParameters(
-            command=sys.executable, # Usa o mesmo python do venv
+            command=sys.executable,
             args=[server_script],
-            env=None
+            env=env # Passamos o ambiente corrigido aqui
         )
 
-        # Estabelece o transporte (stdio) e a sessão
-        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
-        self.session = await self.exit_stack.enter_async_context(ClientSession(stdio_transport[0], stdio_transport[1]))
-        
-        await self.session.initialize()
-        print("   🔌 [MCP CLIENT] Conectado ao servidor de ferramentas via STDIO.")
+        try:
+            # Iniciamos o cliente e a sessão dentro do contexto seguro
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    try:
+                        await asyncio.wait_for(session.initialize(), timeout=self.init_timeout_s)
+                    except asyncio.TimeoutError as e:
+                        raise TimeoutError(
+                            f"Timeout ao inicializar sessão MCP após {self.init_timeout_s:.1f}s"
+                        ) from e
+                    self.session = session
+                    yield # Entrega o controle para o app funcionar
+        except Exception as e:
+            print(f"\n❌ ERRO NO SUBPROCESSO MCP: {e}")
+            print(f"Dica: Verifique se o arquivo {server_script} existe e se as importações nele estão corretas.\n")
+            raise e
+        finally:
+            self.session = None
 
     async def call_tool(self, tool_name, arguments):
-        """Envia uma mensagem JSON-RPC para o servidor executar a tool."""
         if not self.session:
-            await self.connect()
-        
-        # Chama a ferramenta usando o protocolo oficial
-        result = await self.session.call_tool(tool_name, arguments=arguments)
-        
-        # O MCP retorna uma lista de conteúdos (texto, imagem, etc). Pegamos o texto.
-        return result.content[0].text
+            raise RuntimeError("Sessão MCP fechada ou não iniciada.")
 
-    async def close(self):
-        await self.exit_stack.aclose()
+        timeout = datetime.timedelta(seconds=float(self.tool_timeout_s))
+        try:
+            result = await self.session.call_tool(
+                tool_name,
+                arguments=arguments,
+                read_timeout_seconds=timeout,
+            )
+        except TimeoutError as e:
+            raise MCPToolTimeoutError(
+                f"Timeout chamando tool '{tool_name}' após {self.tool_timeout_s:.1f}s"
+            ) from e
+        
+        # Proteção contra retorno vazio
+        if not result.content:
+            return "Erro: Retorno vazio da ferramenta."
+            
+        return result.content[0].text

@@ -1,52 +1,94 @@
-from src.agents.risk_analyst import RiskAnalystAgent
-from src.infrastructure.mcp_client import RealMCPClient
-from src.agents.auditor import AuditorAgent
-from src.agents.compliance import ComplianceAgent
-from src.agents.issuer import IssuerAgent
-from src.tools.db_tools import setup_database
+import json
+import ast
 
-class CreditSystemOrchestrator:
-    def __init__(self):
-        # Cliente Real Async
-        self.mcp_client = RealMCPClient()
-        
-        self.auditor = AuditorAgent()
-        self.compliance = ComplianceAgent()
-        # Passamos o cliente real para o analista
-        self.risk_analyst = RiskAnalystAgent(self.mcp_client)
-        self.issuer = IssuerAgent()
-        setup_database()
+from src.tools.ml_tools import predict_credit_risk
+from src.tools.utils import calculate_dti
 
-    async def handle_request(self, user_request):
-        print(f"\n--- 🤖 Iniciando Processo (MCP Async) para CPF: {user_request.get('cpf')} ---")
+
+def _parse_mcp_payload(payload: str) -> dict:
+    if payload is None:
+        return {"status": "ERROR", "risk_probability": 0.0}
+    payload = str(payload).strip()
+    if not payload:
+        return {"status": "ERROR", "risk_probability": 0.0}
+
+    # Preferir JSON válido
+    try:
+        obj = json.loads(payload)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+
+    # Compatibilidade com retorno antigo: str(dict) com aspas simples
+    try:
+        obj = ast.literal_eval(payload)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+
+    return {"status": "ERROR", "risk_probability": 0.0, "raw": payload}
+
+class RiskAnalystAgent:
+    def __init__(self, mcp_client):
+        self.name = "Analista de Risco (IA)"
+        self.mcp = mcp_client # Instância do RealMCPClient
+
+    async def process(self, request_context):
+        print(f"   [{self.name}] Solicitando análise via Protocolo MCP Real...")
         
-        # Conecta o cliente (inicia o servidor subprocesso)
-        await self.mcp_client.connect()
-        
+        # 1. Chamada Real via Protocolo
+        # O servidor retorna uma string (JSON), precisamos fazer parse
+        age = request_context.get('age')
+        income = request_context.get('income')
+        loan_amount = request_context.get('loan_amount')
+        duration = request_context.get('duration')
+        score = request_context.get('score')
+
         try:
-            context = user_request.copy()
+            ml_result_str = await self.mcp.call_tool(
+                "analyze_risk",
+                arguments={
+                    "age": age,
+                    "income": income,
+                    "loan_amount": loan_amount,
+                    "duration": duration,
+                    "score": score,
+                },
+            )
+            ml_result = _parse_mcp_payload(ml_result_str)
+        except Exception as e:
+            # Fallback local: evita travar a UX quando MCP não responde
+            print(f"   [{self.name}] MCP indisponível/timeout ({e}). Usando fallback local...")
+            try:
+                ml_result = predict_credit_risk(int(age), float(income), float(loan_amount), int(duration), int(score))
+            except Exception:
+                ml_result = {"status": "ERROR", "risk_probability": 0.0, "error_msg": str(e)}
 
-            # Passos Síncronos (Locais)
-            audit_res = self.auditor.process(context)
-            if not audit_res['success']: return self._refuse(audit_res['message'])
-            context = audit_res['data']
-
-            comp_res = self.compliance.process(context)
-            if not comp_res['success']: return self._refuse(comp_res['message'])
-
-            # --- PASSO CRÍTICO: CHAMADA ASSÍNCRONA VIA MCP ---
-            risk_res = await self.risk_analyst.process(context)
-            if not risk_res['success']:
-                return self._refuse(f"Risco: {risk_res.get('reason')}")
-
-            # Passo Final Síncrono
-            issue_res = self.issuer.process(context)
-            return issue_res['final_response']
+        # 2. Chamada para DTI
+        try:
+            dti_str = await self.mcp.call_tool(
+                "calculate_debt_ratio",
+                arguments={"income": income, "loan_amount": loan_amount},
+            )
+            dti = float(dti_str)
+        except Exception:
+            print(f"   [{self.name}] Falha/timeout no cálculo DTI via MCP. Usando cálculo local...")
+            try:
+                dti = float(calculate_dti(float(income), float(loan_amount)))
+            except Exception:
+                dti = 999.9
+        
+        # Lógica de Decisão
+        if ml_result.get('status') == 'HIGH_RISK' or dti > 20.0:
+            return {
+                "success": False,
+                "reason": "Risco Elevado",
+                "details": {"ml_prob": ml_result.get('risk_probability', 0.0), "dti_ratio": dti}
+            }
             
-        finally:
-            # Importante: Fechar a conexão com o servidor ao terminar
-            await self.mcp_client.close()
-
-    def _refuse(self, reason):
-        print(f"   ⛔ PEDIDO NEGADO: {reason}")
-        return {"status": "NEGADO", "motivo": reason}
+        return {
+            "success": True, 
+            "details": {"ml_prob": ml_result.get('risk_probability', 0.0), "dti_ratio": dti}
+        }

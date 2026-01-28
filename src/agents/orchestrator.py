@@ -1,52 +1,50 @@
+from src.agents.risk_analyst import RiskAnalystAgent
+from src.infrastructure.mcp_client import RealMCPClient
 from src.agents.auditor import AuditorAgent
 from src.agents.compliance import ComplianceAgent
-from src.agents.risk_analyst import RiskAnalystAgent
 from src.agents.issuer import IssuerAgent
 from src.tools.db_tools import setup_database
 
 class CreditSystemOrchestrator:
     def __init__(self):
-        # Inicializa a equipe
+        # 1. Cria o Cliente MCP
+        self.mcp_client = RealMCPClient()
+        
+        # 2. Inicializa Agentes
         self.auditor = AuditorAgent()
         self.compliance = ComplianceAgent()
-        self.risk_analyst = RiskAnalystAgent()
+        # Passa o cliente para o analista (que vai usar o call_tool)
+        self.risk_analyst = RiskAnalystAgent(self.mcp_client)
         self.issuer = IssuerAgent()
         
-        # Garante que o banco existe
         setup_database()
 
-    def handle_request(self, user_request):
+    async def handle_request(self, user_request):
         print(f"\n--- 🤖 Iniciando Processo para CPF: {user_request.get('cpf')} ---")
         
-        # Contexto compartilhado (a memória do processo)
-        context = user_request.copy()
+        async with self.mcp_client.run_session():
+            
+            context = user_request.copy()
 
-        # PASSO 1: Auditoria (Quem é você?)
-        audit_res = self.auditor.process(context)
-        if not audit_res['success']:
-            return self._refuse(audit_res['message'])
-        
-        # Atualiza contexto com dados do banco retornados pelo auditor
-        context = audit_res['data']
+            # 1. Auditoria (Local)
+            audit_res = self.auditor.process(context)
+            if not audit_res['success']: return self._refuse(audit_res['message'])
+            context = audit_res['data']
 
-        # PASSO 2: Compliance (Você cumpre as regras?)
-        comp_res = self.compliance.process(context)
-        if not comp_res['success']:
-            return self._refuse(comp_res['message'])
+            # 2. Compliance (Local)
+            comp_res = self.compliance.process(context)
+            if not comp_res['success']: return self._refuse(comp_res['message'])
 
-        # PASSO 3: Análise de Risco (Vai pagar?)
-        risk_res = self.risk_analyst.process(context)
-        if not risk_res['success']:
-            reason = risk_res.get('reason', 'Critérios de risco não atendidos')
-            return self._refuse(f"Reprovado na análise de risco: {reason}")
+            # 3. Risco (Remoto via MCP)
+            # Como estamos dentro do 'async with', o self.mcp_client.session está ativo!
+            risk_res = await self.risk_analyst.process(context)
+            if not risk_res['success']:
+                return self._refuse(f"Risco: {risk_res.get('reason')}")
 
-        # PASSO 4: Emissão (Toma aqui o dinheiro)
-        issue_res = self.issuer.process(context)
-        return issue_res['final_response']
+            # 4. Emissão (Local)
+            issue_res = self.issuer.process(context)
+            return issue_res['final_response']
 
     def _refuse(self, reason):
         print(f"   ⛔ PEDIDO NEGADO: {reason}")
-        return {
-            "status": "NEGADO",
-            "motivo": reason
-        }
+        return {"status": "NEGADO", "motivo": reason}
