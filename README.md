@@ -1,202 +1,126 @@
 # Sistema Agêntico de Crédito (Credit Risk)
 
-Projeto educacional/demonstrativo de um **pipeline de decisão de crédito** com **agentes**, **SQLite** e **modelo de Machine Learning**, exposto via **UI Gradio** e com integração a ferramentas via **MCP (Model Context Protocol)**.
+Projeto educacional/demonstrativo de um **pipeline de decisão de crédito** com **agentes**, **SQLite** e **modelo de Machine Learning**, exposto via **UI Gradio** e orquestrado por **LLM (Google Gemini)**.
 
-> Objetivo: simular um fluxo completo de análise (auditoria → compliance → risco → emissão) com rastreabilidade (logs em banco) e resultado final amigável.
+> Objetivo: simular um fluxo completo de análise (auditoria → compliance → risco → emissão) operado por um LLM que coordena ferramentas locais.
 
 ## Principais recursos
 
-- **Fluxo agêntico** com agentes dedicados:
+- **Orquestrador LLM** (Gemini 2.0 Flash) que decide dinamicamente quais agentes chamar.
+- **Agentes Locais**:
   - Auditoria (validação cadastral)
   - Compliance (regras/regulatórias)
-  - Analista de risco (via MCP com fallback local)
   - Emissão/contrato (aprovação e protocolo)
-- **Modelo ML** (RandomForest) para prever risco e probabilidade.
+- **Análise de Risco ML**: Modelo RandomForest e cálculo de DTI (Debt-to-Income).
 - **Persistência em SQLite** com histórico de solicitações.
-- **Interface Gradio** com:
-  - Nova solicitação
-  - Cadastro/edição de clientes
-  - Histórico de aplicações
-- **MCP server/client** (stdio) para executar tools (risco/DTI/etc.) com timeout.
+- **Interface Gradio** para interação amigável.
 
 ## Stack
 
-- Python
-- Pandas / NumPy / scikit-learn / joblib
+- Python 3.10+
+- **Google Generative AI** (Gemini)
+- Pandas / NumPy / scikit-learn
 - SQLite
 - Gradio
-- MCP (`mcp[cli]`)
+- python-dotenv
 
 ## Arquitetura (alto nível)
 
-1. **UI (Gradio)** coleta CPF/valor/prazo.
-2. **Orchestrator** coordena os agentes:
-   - `AuditorAgent` → valida cliente
-   - `ComplianceAgent` → regras
-   - `RiskAnalystAgent` → chama tool remota via MCP (`analyze_risk`) e calcula DTI
-   - `IssuerAgent` → registra aprovação e retorna protocolo
-3. **Banco SQLite** registra cada tentativa em `applications`.
-
-Fluxo simplificado:
-
-```
-Gradio UI
-  -> CreditSystemOrchestrator
-      -> AuditorAgent
-      -> ComplianceAgent
-      -> RiskAnalystAgent
-           -> RealMCPClient -> mcp_server.py -> tools (ML/DTI)
-           -> fallback local (predict_credit_risk) em caso de falha
-      -> IssuerAgent
-  -> SQLite (applications)
-```
-
-## Estrutura do projeto
-
-- `src/app.py`: entrypoint da UI Gradio
-- `src/ui/gradio_app.py`: layout e callbacks
-- `src/agents/`: agentes (auditoria, compliance, risco, emissor, orquestrador)
-- `src/tools/`: ferramentas locais (DB, ML, utils)
-- `src/infrastructure/`: cliente/servidor MCP
-- `setup_model.py`: gera dataset sintético e treina o modelo
-- `data/credit_data.csv`: dataset sintético gerado
-- `models/credit_risk_model.pkl`: artefato do modelo (necessário para inferência)
-- `database/bank_system.db`: SQLite criado automaticamente
+1. **UI (Gradio)** ou **Scripts** coletam CPF/valor/prazo.
+2. **CreditSystemOrchestrator** recebe o pedido e usa o LLM para decidir os passos:
+   - Chama `check_audit` para validar cliente.
+   - Chama `check_compliance` para regras de negócio.
+   - Chama `analyze_risk` para ML e cálculo financeiro.
+   - Decide entre `issue_contract` (Aprovar) ou `deny_request` (Negar).
+3. **Banco SQLite** registra cada tentativa e resultado.
 
 ## Pré-requisitos
 
-- Python 3.10+ (recomendado)
-- Windows, macOS ou Linux
+- Python 3.10 ou superior.
+- Uma **API Key do Google Gemini** (Google AI Studio).
 
-> No Windows, o projeto aplica um ajuste de event loop para evitar problemas com subprocessos.
+## Instalação e Configuração
 
-## Instalação
+### 1. Configurar Entorno (Windows/PowerShell)
 
-1) (Opcional) Crie e ative um virtualenv
+Recomendamos usar um ambiente virtual (`venv`) para isolar as dependências.
 
-Windows (PowerShell):
-
-```bash
+```powershell
+# 1. Crie o ambiente virtual (caso não exista)
 python -m venv venv
+
+# 2. Ative o ambiente
 .\venv\Scripts\Activate.ps1
 ```
 
-2) Instale dependências
+### 2. Instalar Dependências
 
-```bash
+Com o ambiente ativo:
+
+```powershell
 pip install -r requirements.txt
 ```
 
-3) Gere/treine o modelo (obrigatório na primeira execução)
+### 3. Configurar API Key
 
-```bash
-python setup_model.py
+Crie um arquivo chamado `.env` na raiz do projeto e adicione sua chave:
+
+```ini
+GOOGLE_API_KEY=sua_chave_aqui_sem_aspas
 ```
 
-Isso irá criar:
+### 4. Preparar Modelo e Banco de Dados
 
-- `data/credit_data.csv`
-- `models/credit_risk_model.pkl`
-
-## Como executar
-
-### 1) Rodar a UI (Gradio)
-
-```bash
-python src/app.py
-```
-
-O terminal exibirá a URL local (ex.: `http://127.0.0.1:7860`).
-
-### 2) Rodar um fluxo de exemplo via script
-
-O arquivo `main.py` contém um exemplo simples chamando o orquestrador:
-
-```bash
-python main.py
-```
-
-### 3) Rodar testes de integração (tools)
-
-```bash
-python test_tools_integration.py
-```
-
-## Variáveis de ambiente (MCP)
-
-Você pode ajustar timeouts do MCP sem alterar código:
-
-- `MCP_INIT_TIMEOUT_S` (default: 10)
-- `MCP_TOOL_TIMEOUT_S` (default: 10)
-
-Exemplo (Windows PowerShell):
+Gere o modelo de Machine Learning e o banco de dados inicial:
 
 ```powershell
-$env:MCP_TOOL_TIMEOUT_S = "20"
+python setup_model.py
+```
+> Isso criará `models/credit_risk_model.pkl` e `database/bank_system.db`.
+
+---
+
+## Como Executar
+
+### Opção 1: Verificar Orquestração (Terminal)
+
+Para testar o fluxo completo via terminal (sem interface gráfica), rode o script de verificação:
+
+```powershell
+python src/verify_orchestrator.py
+```
+> Este script simula um pedido de crédito e exibe o "raciocínio" do LLM e o resultado final no console.
+
+### Opção 2: Rodar a Interface Web (Gradio)
+
+Para usar a aplicação completa no navegador:
+
+```powershell
 python src/app.py
 ```
+> O terminal exibirá uma URL local (ex.: `http://127.0.0.1:7860`). Acesse-a para interagir com o sistema.
 
-## Modelo de risco (ML)
-
-A inferência local acontece em `src/tools/ml_tools.py` via `predict_credit_risk(...)`, retornando:
-
-- `risk_prediction`: `0` (baixo risco) ou `1` (alto risco)
-- `risk_probability`: probabilidade da classe de risco (classe `1`)
-- `status`: `LOW_RISK` ou `HIGH_RISK`
-
-Se o arquivo `models/credit_risk_model.pkl` não existir, a tool lança:
-
-- `FileNotFoundError`: rode `python setup_model.py`
-
-## Banco de dados (SQLite)
-
-O SQLite fica em:
-
-- `database/bank_system.db`
-
-Tabelas:
-
-- `clients`: cadastro do cliente
-- `applications`: histórico de solicitações
-
-Cada solicitação registra campos como `cpf`, `amount`, `duration`, `status` e `reason`.
-
-> Em aprovações, `reason` armazena um JSON com `risk_prediction`, `risk_probability` e `status` do ML.
+---
 
 ## Troubleshooting
 
-### Modelo não encontrado
+### Erro: `ModuleNotFoundError`
+Certifique-se de estar rodando os comandos **da raiz do projeto** e com o **venv ativo**. 
 
-Erro típico:
+### Erro: `GoogleGenerativeAI Error` ou `ResourceExhausted`
+Verifique se sua **API Key** está correta no arquivo `.env`. Erros de "ResourceExhausted" indicam que você atingiu o limite gratuito de requisições por minuto do Gemini. Aguarde alguns instantes e tente novamente.
 
-- `Modelo não encontrado em .../models/credit_risk_model.pkl. Rode o setup_model.py primeiro.`
-
-Solução:
-
-```bash
-python setup_model.py
-```
-
-### Travamento/timeout na análise via MCP
-
-Se o MCP falhar/timeout, o `RiskAnalystAgent` faz fallback para inferência local.
-
-Você pode aumentar o timeout:
-
+### Erro: `UnicodeEncodeError` (Windows)
+Se tiver problemas com emojis no terminal do Windows:
 ```powershell
-$env:MCP_TOOL_TIMEOUT_S = "20"
+$env:PYTHONIOENCODING='utf-8'
+python src/verify_orchestrator.py
 ```
 
-### ImportError / `src.*` não encontrado
+## Estrutura de Pastas
 
-A UI (`src/app.py`) já garante que o project root esteja no `sys.path`. Se você executar módulos diretamente, prefira rodar pela raiz do repo:
-
-```bash
-python src/app.py
-```
-
-## Observações importantes
-
-- Este projeto é **didático**: dados e CPFs são fictícios e o modelo é treinado em dataset sintético.
-- Não use em produção sem revisão completa de segurança, privacidade e governança de modelos.
-
+- `src/agents/`: Lógica do Orquestrador e Agentes.
+- `src/tools/`: Ferramentas de ML, Banco de Dados e Utils.
+- `src/ui/`: Código da interface Gradio.
+- `models/`: Artefato do modelo ML treinado.
+- `database/`: Arquivo SQLite.

@@ -13,13 +13,11 @@ class MCPToolTimeoutError(TimeoutError):
 class RealMCPClient:
     def __init__(self, *, init_timeout_s: float = 10.0, tool_timeout_s: float = 10.0):
         self.session = None
-        # Permite override via env vars sem mexer no código
         self.init_timeout_s = float(os.environ.get("MCP_INIT_TIMEOUT_S", init_timeout_s))
         self.tool_timeout_s = float(os.environ.get("MCP_TOOL_TIMEOUT_S", tool_timeout_s))
 
     @contextlib.asynccontextmanager
     async def run_session(self):
-        # Caminho absoluto para o script do servidor
         server_script = os.path.join(os.path.dirname(__file__), "mcp_server.py")
         
         env = os.environ.copy()
@@ -29,11 +27,10 @@ class RealMCPClient:
         server_params = StdioServerParameters(
             command=sys.executable,
             args=[server_script],
-            env=env # Passamos o ambiente corrigido aqui
+            env=env 
         )
 
         try:
-            # Iniciamos o cliente e a sessão dentro do contexto seguro
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     try:
@@ -43,7 +40,7 @@ class RealMCPClient:
                             f"Timeout ao inicializar sessão MCP após {self.init_timeout_s:.1f}s"
                         ) from e
                     self.session = session
-                    yield # Entrega o controle para o app funcionar
+                    yield 
         except Exception as e:
             print(f"\n❌ ERRO NO SUBPROCESSO MCP: {e}")
             print(f"Dica: Verifique se o arquivo {server_script} existe e se as importações nele estão corretas.\n")
@@ -67,7 +64,6 @@ class RealMCPClient:
                 f"Timeout chamando tool '{tool_name}' após {self.tool_timeout_s:.1f}s"
             ) from e
         
-        # Proteção contra retorno vazio
         if not result.content:
             return "Erro: Retorno vazio da ferramenta."
             

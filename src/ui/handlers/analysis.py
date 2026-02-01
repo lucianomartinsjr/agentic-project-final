@@ -27,11 +27,14 @@ async def process_credit_analysis(client_choice, amount, duration, purpose):
         details = result.get("detalhes") or {}
 
         ml_block = ""
-        if ml_risk or any(k in details for k in ("risk_prediction", "risk_probability", "status", "dti_ratio")):
-            risk_prediction = ml_risk.get("risk_prediction", details.get("risk_prediction"))
-            risk_probability = ml_risk.get("risk_probability", details.get("risk_probability"))
-            ml_status = ml_risk.get("status", details.get("status"))
-            dti_ratio = details.get("dti_ratio")
+        # Ensure details is a dict before checking/accessing keys
+        details_dict = details if isinstance(details, dict) else {}
+        
+        if ml_risk or any(k in details_dict for k in ("risk_prediction", "risk_probability", "status", "dti_ratio")):
+            risk_prediction = ml_risk.get("risk_prediction", details_dict.get("risk_prediction"))
+            risk_probability = ml_risk.get("risk_probability", details_dict.get("risk_probability"))
+            ml_status = ml_risk.get("status", details_dict.get("status"))
+            dti_ratio = details_dict.get("dti_ratio")
 
             parts = [
                 f"risk_prediction={risk_prediction}",
@@ -47,14 +50,16 @@ async def process_credit_analysis(client_choice, amount, duration, purpose):
             ml_block = f"\n**Detalhes do Risco (ML/DTI):** {' | '.join(parts)}\n"
 
         compliance_block = ""
-        if details.get("compliance_rule"):
-            # Render simples e objetivo para auditoria/explicabilidade
+        if isinstance(details, dict) and details.get("compliance_rule"):
             rule = details.get("compliance_rule")
             rule_parts = [f"regra={rule}"]
             for k in ("cpf", "age", "score"):
                 if k in details:
                     rule_parts.append(f"{k}={details.get(k)}")
             compliance_block = f"\n**Detalhes de Compliance:** {' | '.join(rule_parts)}\n"
+        elif isinstance(details, str) and not ml_block:
+             # Se for string e não tivermos tratado no bloco ML, mostramos como info genérica
+             compliance_block = f"\n**Detalhes Técnicos:** {details}\n"
 
         friendly_output = f"""
         ### Resultado da Análise

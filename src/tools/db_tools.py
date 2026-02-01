@@ -2,15 +2,10 @@ import sqlite3
 import os
 from datetime import datetime
 
-# Caminho para o banco de dados
 DB_PATH = os.path.join(os.path.dirname(__file__), '../../database/bank_system.db')
 
 
 def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
-    """Garante que uma tabela possua colunas específicas (migração leve via ALTER TABLE).
-
-    columns: {"col_name": "SQL_TYPE"}
-    """
     cursor = conn.cursor()
     cursor.execute(f"PRAGMA table_info({table})")
     existing = {row[1] for row in cursor.fetchall()}
@@ -21,16 +16,12 @@ def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str
     conn.commit()
 
 def _get_connection():
-    """Helper interno para conectar ao banco."""
-    # Garante que a pasta database existe
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-# TOOL 1: Inicializar o banco com dados mockados (para teste)
 def setup_database():
-    """Cria a tabela e insere clientes fictícios se não existirem."""
     conn = _get_connection()
     cursor = conn.cursor()
     
@@ -73,7 +64,6 @@ def setup_database():
     '''
     )
 
-    # Migração leve para bancos antigos
     _ensure_columns(
         conn,
         "clients",
@@ -98,7 +88,6 @@ def setup_database():
         },
     )
 
-    # Backfill leve para bancos existentes (mantém valores já definidos)
     cursor.execute(
         """
         UPDATE clients
@@ -113,7 +102,6 @@ def setup_database():
     )
     conn.commit()
 
-    # Sanidade: corrige idades claramente inválidas (mantém comportamento do sistema mais estável)
     cursor.execute(
         """
         UPDATE clients
@@ -122,7 +110,6 @@ def setup_database():
         """
     )
 
-    # Sanidade específica: garante que o cliente de teste Bob Santos tenha dados coerentes
     cursor.execute(
         """
         UPDATE clients
@@ -145,18 +132,15 @@ def setup_database():
     )
     conn.commit()
     
-    # Inserindo dados dummy apenas se a tabela estiver vazia
     cursor.execute('SELECT count(*) FROM clients')
     if cursor.fetchone()[0] == 0:
         data = [
-            # id, name, cpf, income, age, score, sex, job, housing, saving_accounts, checking_account
             (1, 'Alice Silva', '111.222.333-44', 5000.0, 30, 750, 'female', 1, 'own', 'moderate', 'little'),
             (2, 'Bob Santos', '555.666.777-88', 2000.0, 20, 400, 'male', 0, 'rent', 'little', 'no_inf'),
             (3, 'Charlie Souza', '999.888.777-66', 12000.0, 45, 800, 'male', 2, 'own', 'rich', 'moderate'),
         ]
         cursor.executemany('INSERT INTO clients VALUES (?,?,?,?,?,?,?,?,?,?,?)', data)
         conn.commit()
-        print("✅ Banco de dados inicializado com dados de teste.")
     
     conn.close()
     return "Database setup complete."
@@ -174,7 +158,6 @@ def add_client(
     saving_accounts: str | None = None,
     checking_account: str | None = None,
 ) -> dict:
-    """Cadastra um novo cliente (ou retorna erro se CPF já existir)."""
     conn = _get_connection()
     cursor = conn.cursor()
     try:
@@ -207,7 +190,6 @@ def add_client(
 
 
 def list_clients() -> list[dict]:
-    """Lista todos os clientes cadastrados."""
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -232,9 +214,8 @@ def list_clients() -> list[dict]:
         for r in rows
     ]
 
-# TOOL 2: Buscar cliente pelo CPF
+
 def get_client_data(cpf):
-    """Busca dados cadastrais de um cliente pelo CPF."""
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM clients WHERE cpf = ?', (cpf,))
@@ -257,16 +238,8 @@ def get_client_data(cpf):
         }
     return None
 
-# TOOL 3: Registrar solicitação de empréstimo (Log)
+
 def log_application_attempt(*args, **kwargs):
-    """Registra uma tentativa de solicitação.
-
-    Compatível com assinatura antiga:
-      log_application_attempt(client_id, amount, status)
-
-    Nova assinatura (recomendada):
-      log_application_attempt(cpf=..., client_id=..., amount=..., duration=..., status=..., reason=...)
-    """
     if args and len(args) == 3 and not kwargs:
         client_id, amount, status = args
         cpf = None
@@ -328,16 +301,11 @@ def log_application_attempt(*args, **kwargs):
     finally:
         conn.close()
 
-    # Mantém o comportamento de log no terminal
     extra = f" | reason={reason}" if reason else ""
-    print(
-        f"📝 LOG DB: CPF {cpf or '-'} (Cliente {client_id or '-'}) tentou {amount}. Status final: {status}{extra}"
-    )
     return True
 
 
 def list_applications() -> list[dict]:
-    """Lista histórico de solicitações (mais recentes primeiro)."""
     conn = _get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -378,7 +346,6 @@ def update_client(
     saving_accounts: str | None = None,
     checking_account: str | None = None,
 ) -> dict:
-    """Edita um cliente existente identificado pelo CPF antigo."""
     conn = _get_connection()
     cursor = conn.cursor()
     try:

@@ -12,7 +12,6 @@ def _parse_mcp_payload(payload: str) -> dict:
     if not payload:
         return {"status": "ERROR", "risk_probability": 0.0}
 
-    # Preferir JSON válido
     try:
         obj = json.loads(payload)
         if isinstance(obj, dict):
@@ -35,8 +34,6 @@ class RiskAnalystAgent:
         self.mcp = mcp_client 
 
     async def process(self, request_context):
-        print(f"   [{self.name}] Solicitando análise via Protocolo MCP Real...")
-        
         age = request_context.get("age")
         income = request_context.get("income")
         loan_amount = request_context.get("loan_amount")
@@ -49,7 +46,6 @@ class RiskAnalystAgent:
         checking_account = request_context.get("checking_account")
         job = request_context.get("job")
 
-        # Normalização mínima (best practice): garante tipos para tools/ML.
         try:
             age_i = int(age)
             income_f = float(income)
@@ -94,7 +90,6 @@ class RiskAnalystAgent:
         except Exception as e:
             mcp_error = e
 
-        # Fail-safe: se MCP falhar ou retornar payload inválido, usar fallback local.
         needs_local_fallback = (
             ml_result is None
             or ml_result.get("status") == "ERROR"
@@ -103,8 +98,6 @@ class RiskAnalystAgent:
         )
 
         if needs_local_fallback:
-            if mcp_error is not None:
-                print(f"   [{self.name}] MCP indisponível/timeout ({mcp_error}). Usando fallback local...")
             try:
                 ml_result = predict_credit_risk(
                     age_i,
@@ -120,7 +113,6 @@ class RiskAnalystAgent:
                     job=job,
                 )
             except Exception as inner:
-                # Best practice: não aprovar com análise quebrada.
                 return {
                     "success": False,
                     "reason": "Falha na análise de risco (MCP e fallback local).",
@@ -132,7 +124,6 @@ class RiskAnalystAgent:
                     },
                 }
 
-        # 2. Chamada para DTI
         try:
             dti_str = await self.mcp.call_tool(
                 "calculate_debt_ratio",
@@ -140,13 +131,11 @@ class RiskAnalystAgent:
             )
             dti = float(dti_str)
         except Exception:
-            print(f"   [{self.name}] Falha/timeout no cálculo DTI via MCP. Usando cálculo local...")
             try:
                 dti = float(calculate_dti(income_f, loan_amount_f))
             except Exception:
                 dti = 999.9
         
-        # Lógica de Decisão
         ml_status = (ml_result or {}).get("status")
         is_high_risk = ml_status == "HIGH_RISK"
         is_high_dti = dti > 20.0

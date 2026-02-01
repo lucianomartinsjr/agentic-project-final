@@ -5,8 +5,6 @@ class ComplianceAgent:
         self.name = "Officer de Compliance"
 
     def process(self, request_context):
-        print(f"   [{self.name}] Validando regras regulatórias...")
-        
         cpf = request_context.get("cpf")
         age = request_context.get("age")
         score = request_context.get("score")
@@ -18,7 +16,6 @@ class ComplianceAgent:
                 "details": {"compliance_rule": "MISSING_DATA", "field": "cpf"},
             }
 
-        # Regra 1: Validação de CPF (Tool)
         if not validate_cpf_format(str(cpf)):
             return {
                 "success": False,
@@ -59,7 +56,6 @@ class ComplianceAgent:
                 "details": {"compliance_rule": "INVALID_DATA", "field": "score", "score": score},
             }
 
-        # Regra 2: Maioridade Penal (Tool)
         if not check_legal_age(age_int):
             return {
                 "success": False,
@@ -70,7 +66,6 @@ class ComplianceAgent:
                 },
             }
 
-        # Regra 3: Blacklist/Score Mínimo (Tool)
         if not check_blacklist_score(score_int):
             return {
                 "success": False,

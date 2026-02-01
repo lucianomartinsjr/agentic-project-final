@@ -16,7 +16,6 @@ from src.ui.handlers.history import list_applications_rows
 
 
 MODAL_CSS = """
-/* Modal simulado (Gradio 6.4 não tem Dialog/Modal nativo) */
 #modal_create, #modal_edit {
     position: fixed;
     top: 50%;
@@ -139,7 +138,6 @@ def create_demo() -> gr.Blocks:
                 def ui_close_modals():
                     return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True)
 
-                # Modal: Cadastro
                 with gr.Group(visible=False, elem_id="modal_create") as modal_create:
                     gr.Markdown("## Cadastrar cliente")
                     new_name = gr.Textbox(label="Nome", value="", placeholder="Ex: Maria Souza")
@@ -167,7 +165,6 @@ def create_demo() -> gr.Blocks:
                         btn_create = gr.Button("💾 Cadastrar", variant="primary")
                         btn_cancel_create = gr.Button("Cancelar")
 
-                # Modal: Edição
                 with gr.Group(visible=False, elem_id="modal_edit") as modal_edit:
                     gr.Markdown("## Editar cliente")
                     edit_choices = client_choices()
@@ -202,11 +199,9 @@ def create_demo() -> gr.Blocks:
                         btn_update = gr.Button("💾 Salvar alterações", variant="primary")
                         btn_cancel_edit = gr.Button("Cancelar")
 
-                # Máscaras CPF
                 new_cpf.change(fn=format_cpf_input, inputs=[new_cpf], outputs=[new_cpf])
                 edit_cpf.change(fn=format_cpf_input, inputs=[edit_cpf], outputs=[edit_cpf])
 
-                # Carregar dados do cliente selecionado para edição
                 edit_dropdown.change(
                     fn=load_client_for_edit,
                     inputs=[edit_dropdown],
@@ -241,13 +236,11 @@ def create_demo() -> gr.Blocks:
                     ],
                 )
 
-                # Botões abrir/fechar modais
                 btn_open_create.click(fn=ui_open_create_modal, inputs=[], outputs=[modal_create, modal_edit, clients_list_group])
                 btn_open_edit.click(fn=ui_open_edit_modal, inputs=[], outputs=[modal_create, modal_edit, clients_list_group])
                 btn_cancel_create.click(fn=ui_close_modals, inputs=[], outputs=[modal_create, modal_edit, clients_list_group])
                 btn_cancel_edit.click(fn=ui_close_modals, inputs=[], outputs=[modal_create, modal_edit, clients_list_group])
 
-                # Ações de salvar
                 btn_create.click(
                     fn=create_client_and_refresh,
                     inputs=[
@@ -302,7 +295,6 @@ def create_demo() -> gr.Blocks:
                 btn_refresh_hist.click(fn=list_applications_rows, inputs=[], outputs=[apps_table])
                 demo.load(fn=list_applications_rows, inputs=[], outputs=[apps_table])
 
-        # Bindings que dependem de componentes criados em outras abas
         btn_submit.click(
             fn=process_credit_analysis,
             inputs=[client_dropdown, inp_amount, inp_duration, inp_purpose],
