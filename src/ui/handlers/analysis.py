@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.agents.orchestrator import CreditSystemOrchestrator
 from src.services.client_choice_service import extract_cpf_from_choice
+from src.tools.db_tools import get_client_data
 from src.ui.handlers.history import list_applications_rows
 
 
@@ -9,7 +10,53 @@ async def process_credit_analysis(client_choice, amount, duration, purpose):
     orchestrator = CreditSystemOrchestrator()
 
     cpf = extract_cpf_from_choice(client_choice)
+    client_data = get_client_data(cpf)
+    if not client_data:
+        hist_rows = list_applications_rows()
+        friendly_output = f"""
+        ### Resultado da Análise
+        **Status:** ⛔ ERRO
+        **Detalhe:** Cliente com CPF {cpf} não encontrado.
+
+        ---
+        *Cadastre o cliente antes de solicitar análise.*
+        """
+        return friendly_output, {"status": "ERRO", "mensagem": "Cliente não encontrado"}, hist_rows
+
+    required_client_fields = [
+        "age",
+        "score",
+        "income",
+        "sex",
+        "housing",
+        "saving_accounts",
+        "checking_account",
+        "job",
+    ]
+    missing_client_fields = [
+        field
+        for field in required_client_fields
+        if field not in client_data or client_data.get(field) in (None, "")
+    ]
+    if missing_client_fields:
+        hist_rows = list_applications_rows()
+        friendly_output = f"""
+        ### Resultado da Análise
+        **Status:** ⛔ ERRO
+        **Detalhe:** Cadastro incompleto para análise.
+        **Campos faltando:** {', '.join(missing_client_fields)}
+
+        ---
+        *Atualize o cadastro do cliente antes de solicitar análise.*
+        """
+        return friendly_output, {
+            "status": "ERRO",
+            "mensagem": "Cadastro incompleto",
+            "campos_faltando": missing_client_fields,
+        }, hist_rows
+
     request_data = {
+        **client_data,
         "cpf": cpf,
         "loan_amount": float(amount),
         "duration": int(duration),
