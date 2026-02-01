@@ -7,8 +7,6 @@ class IssuerAgent:
         self.name = "Emissor de Contratos"
 
     def process(self, request_context):
-        print(f"   [{self.name}] Finalizando proposta...")
-
         loan_amount = request_context.get("loan_amount")
         duration = request_context.get("duration")
         cpf = request_context.get("cpf")
@@ -71,11 +69,9 @@ class IssuerAgent:
                 },
             }
         
-        # Gera protocolo (Tool)
         protocol = generate_protocol_id()
         amount_fmt = format_currency(loan_amount_f)
         
-        # Loga no banco (Tool)
         ml_risk = request_context.get("ml_risk") or {}
         ml_risk_log = {
             "risk_prediction": ml_risk.get("risk_prediction"),

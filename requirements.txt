@@ -5,3 +5,5 @@ joblib
 mcp[cli] 
 uvicorn
 gradio
+google-generativeai
+python-dotenv

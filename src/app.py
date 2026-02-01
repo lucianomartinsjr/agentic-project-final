@@ -1,12 +1,3 @@
-"""Entrypoint da UI Gradio.
-
-Este arquivo fica propositalmente pequeno: configura runtime e dá launch.
-O layout e callbacks estão em `src/ui/gradio_app.py`.
-
-Observação (Windows): rodar via `python src/app.py` não adiciona o diretório raiz ao `sys.path`.
-Por isso, garantimos o project root no path para que imports `src.*` funcionem.
-"""
-
 from __future__ import annotations
 
 import os

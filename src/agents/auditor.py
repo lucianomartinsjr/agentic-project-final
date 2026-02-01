@@ -6,7 +6,6 @@ class AuditorAgent:
         self.name = "Auditor de Dados"
 
     def process(self, request_context):
-        print(f"   [{self.name}] Verificando cadastro no Banco de Dados...")
         cpf = request_context.get("cpf")
 
         if not cpf or not validate_cpf_format(str(cpf)):
@@ -19,7 +18,6 @@ class AuditorAgent:
                 },
             }
         
-        # Usa a Tool de DB
         try:
             client_data = get_client_data(str(cpf))
         except Exception as e:
@@ -35,6 +33,5 @@ class AuditorAgent:
                 "message": f"Cliente com CPF {cpf} não encontrado."
             }
         
-        # Enriquece o contexto com os dados vindos do banco
         request_context.update(client_data)
         return {"success": True, "data": request_context}
